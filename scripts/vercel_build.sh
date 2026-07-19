@@ -33,14 +33,9 @@ if [ ! -f "web/index.html" ]; then
   flutter create . --platforms web
 fi
 
-# sqflite on web (sqflite_common_ffi_web) needs sqlite3.wasm + a worker script
-# copied into web/ — these aren't created by `flutter create`, only by this
-# package-specific setup command. Without them the app loads a blank page and
-# throws "Failed to fetch a worker script" at runtime.
-if [ ! -f "web/sqflite_sw.js" ]; then
-  echo "Setting up sqflite web worker files..."
-  dart run sqflite_common_ffi_web:setup
-fi
+# NOTE: sqflite_common_ffi_web's worker-based setup step was removed here —
+# web now uses a pure in-memory database factory (see db_init_web.dart)
+# to sidestep an upstream worker/wasm compatibility bug.
 
 echo "Building release web bundle..."
 flutter build web --release --source-maps \
