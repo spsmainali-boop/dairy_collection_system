@@ -32,6 +32,11 @@ if [ ! -f "web/index.html" ]; then
   flutter create . --platforms web
 fi
 
+if [ ! -f "web/sqflite_sw.js" ]; then
+  echo "Setting up sqflite web worker files..."
+  dart run sqflite_common_ffi_web:setup
+fi
+
 echo "Serving at http://localhost:${WEB_PORT} — open this URL in your browser."
 flutter run -d web-server \
   --web-port="${WEB_PORT}" \
