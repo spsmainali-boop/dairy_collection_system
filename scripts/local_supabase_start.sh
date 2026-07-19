@@ -26,8 +26,6 @@ supabase start
 
 echo
 echo "Applying schema.sql to the local database..."
-# `supabase db execute` runs a SQL file against the local Postgres instance
-# started above (uses the connection string printed by `supabase start`).
 supabase db execute --file supabase/schema.sql --local || \
   psql "$(supabase status -o json | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["DB_URL"])')" \
        -f supabase/schema.sql

@@ -24,13 +24,19 @@ set +a
 WEB_PORT="${WEB_PORT:-8080}"
 
 flutter config --enable-web >/dev/null
-(cd flutter_app && flutter pub get)
+cd flutter_app
+flutter pub get
+
+if [ ! -f "web/index.html" ]; then
+  echo "web/ folder missing — scaffolding it now..."
+  flutter create . --platforms web
+fi
 
 echo "Building release web bundle..."
-(cd flutter_app && flutter build web \
+flutter build web \
   --dart-define=SUPABASE_URL="${SUPABASE_URL}" \
-  --dart-define=SUPABASE_ANON_KEY="${SUPABASE_ANON_KEY}")
+  --dart-define=SUPABASE_ANON_KEY="${SUPABASE_ANON_KEY}"
 
 echo "Serving flutter_app/build/web on http://localhost:${WEB_PORT} (Ctrl+C to stop)..."
-cd flutter_app/build/web
+cd build/web
 python3 -m http.server "${WEB_PORT}"

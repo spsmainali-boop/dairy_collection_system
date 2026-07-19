@@ -27,11 +27,19 @@ WEB_PORT="${WEB_PORT:-8080}"
 echo "Enabling Flutter web support (no-op if already enabled)..."
 flutter config --enable-web >/dev/null
 
+cd flutter_app
 echo "Fetching packages..."
-(cd flutter_app && flutter pub get)
+flutter pub get
+
+# Scaffold the web/ platform folder if this is the first time it's been built
+# (the repo was hand-authored, not created via `flutter create`).
+if [ ! -f "web/index.html" ]; then
+  echo "web/ folder missing — scaffolding it now..."
+  flutter create . --platforms web
+fi
 
 echo "Launching web app on http://localhost:${WEB_PORT} ..."
-(cd flutter_app && flutter run -d chrome \
+flutter run -d chrome \
   --web-port="${WEB_PORT}" \
   --dart-define=SUPABASE_URL="${SUPABASE_URL}" \
-  --dart-define=SUPABASE_ANON_KEY="${SUPABASE_ANON_KEY}")
+  --dart-define=SUPABASE_ANON_KEY="${SUPABASE_ANON_KEY}"

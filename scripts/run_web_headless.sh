@@ -24,10 +24,16 @@ set +a
 WEB_PORT="${WEB_PORT:-8080}"
 
 flutter config --enable-web >/dev/null
-(cd flutter_app && flutter pub get)
+cd flutter_app
+flutter pub get
+
+if [ ! -f "web/index.html" ]; then
+  echo "web/ folder missing — scaffolding it now..."
+  flutter create . --platforms web
+fi
 
 echo "Serving at http://localhost:${WEB_PORT} — open this URL in your browser."
-(cd flutter_app && flutter run -d web-server \
+flutter run -d web-server \
   --web-port="${WEB_PORT}" \
   --dart-define=SUPABASE_URL="${SUPABASE_URL}" \
-  --dart-define=SUPABASE_ANON_KEY="${SUPABASE_ANON_KEY}")
+  --dart-define=SUPABASE_ANON_KEY="${SUPABASE_ANON_KEY}"

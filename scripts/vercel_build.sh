@@ -24,6 +24,15 @@ flutter precache --web
 cd flutter_app
 flutter pub get
 
+# This repo was hand-authored rather than scaffolded with `flutter create`,
+# so the platform-specific web/ folder (index.html, manifest.json, icons)
+# doesn't exist yet. Generate it if missing — safe to run repeatedly, and
+# does NOT touch existing lib/ code, only adds the platform folder.
+if [ ! -f "web/index.html" ]; then
+  echo "web/ folder missing — scaffolding it now..."
+  flutter create . --platforms web
+fi
+
 echo "Building release web bundle..."
 flutter build web --release \
   --dart-define=SUPABASE_URL="${SUPABASE_URL}" \
