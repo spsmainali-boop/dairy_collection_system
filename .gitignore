@@ -1,0 +1,6 @@
+.env.web
+flutter_app/build/
+flutter_app/.dart_tool/
+supabase/.temp/
+supabase/.branches/
+*.log
