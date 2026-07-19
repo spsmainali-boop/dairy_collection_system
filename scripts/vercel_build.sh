@@ -43,7 +43,7 @@ if [ ! -f "web/sqflite_sw.js" ]; then
 fi
 
 echo "Building release web bundle..."
-flutter build web --release \
+flutter build web --release --source-maps \
   --dart-define=SUPABASE_URL="${SUPABASE_URL}" \
   --dart-define=SUPABASE_ANON_KEY="${SUPABASE_ANON_KEY}"
 
