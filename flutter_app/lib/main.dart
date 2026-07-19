@@ -17,10 +17,53 @@ const supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY', defaultValue
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await Supabase.initialize(url: supabaseUrl, anonKey: supabaseAnonKey);
-  await LocalDb.instance.db; // ensure schema created on startup (web uses IndexedDB automatically)
+  // Wrap startup in try/catch so a genuine startup failure shows a readable
+  // error screen instead of a silent blank page — much easier to debug,
+  // especially on a minified release web build where browser stack traces
+  // are unreadable.
+  try {
+    await Supabase.initialize(url: supabaseUrl, anonKey: supabaseAnonKey);
+    await LocalDb.instance.db; // ensure schema created on startup (web uses IndexedDB automatically)
+    runApp(const DairyApp());
+  } catch (e, stack) {
+    runApp(_StartupErrorApp(error: e.toString(), stack: stack.toString()));
+  }
+}
 
-  runApp(const DairyApp());
+/// Shown only if something fails during app startup (bad Supabase URL/key,
+/// local DB init failure, etc.) — makes the real error visible and
+/// selectable/copyable instead of a blank white screen.
+class _StartupErrorApp extends StatelessWidget {
+  const _StartupErrorApp({required this.error, required this.stack});
+  final String error;
+  final String stack;
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(
+        backgroundColor: Colors.red.shade50,
+        body: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Startup Error',
+                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.red)),
+                const SizedBox(height: 16),
+                SelectableText(error, style: const TextStyle(fontSize: 16, fontFamily: 'monospace')),
+                const SizedBox(height: 16),
+                const Text('Stack trace:', style: TextStyle(fontWeight: FontWeight.bold)),
+                SelectableText(stack, style: const TextStyle(fontSize: 12, fontFamily: 'monospace')),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class DairyApp extends StatefulWidget {
