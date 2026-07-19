@@ -14,7 +14,6 @@ class AppTheme {
 
   static ThemeData get theme => ThemeData(
         useMaterial3: true,
-        fontFamily: 'NotoSansDevanagari',
         scaffoldBackgroundColor: background,
         colorScheme: ColorScheme.fromSeed(
           seedColor: primaryGreen,

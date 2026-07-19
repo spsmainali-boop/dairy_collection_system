@@ -55,9 +55,4 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   # Nepali font (bundle NotoSansDevanagari or similar in assets/fonts and register here)
-  fonts:
-    - family: NotoSansDevanagari
-      fonts:
-        - asset: assets/fonts/NotoSansDevanagari-Regular.ttf
-        - asset: assets/fonts/NotoSansDevanagari-Bold.ttf
-          weight: 700
+  
