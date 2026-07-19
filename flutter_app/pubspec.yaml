@@ -15,9 +15,14 @@ dependencies:
 
   # Offline local database
   sqflite: ^2.3.3
-  sqflite_common_ffi_web: ^0.4.3      # enables sqflite on Flutter Web
+  sqflite_common_ffi_web: ^1.1.2      # bumped from ^0.4.3 — fixes a version
+                                       # mismatch between this package and the
+                                       # sqlite3.wasm binary its own setup
+                                       # tool downloads, which otherwise causes
+                                       # "Unsupported operation: unsupported
+                                       # result null (null)" at runtime.
   path: ^1.9.0
-  path_provider: ^2.1.3
+  path_provider: ^2.1.4
 
   # Connectivity + background sync
   connectivity_plus: ^6.0.3
@@ -54,5 +59,3 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-  # Nepali font (bundle NotoSansDevanagari or similar in assets/fonts and register here)
-  
