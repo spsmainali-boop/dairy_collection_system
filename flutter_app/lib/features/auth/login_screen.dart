@@ -72,6 +72,14 @@ class _LoginScreenState extends State<LoginScreen> {
             ],
           ),
           actions: [
+            // Lets someone skip changing the PIN right now and keep using the
+            // default one. They'll be prompted again next time they log in,
+            // since must_change_pin stays true on the server until they
+            // actually change it.
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('पछि गर्छु'), // "I'll do it later"
+            ),
             ElevatedButton(
               onPressed: () async {
                 if (newPinCtrl.text.length < 4) {
