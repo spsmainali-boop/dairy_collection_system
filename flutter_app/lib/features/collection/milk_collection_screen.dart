@@ -3,6 +3,7 @@ import 'package:uuid/uuid.dart';
 import '../../core/database/local_db.dart';
 import '../../core/models/models.dart';
 import '../../core/theme/app_theme.dart';
+import '../farmers/farmer_list_screen.dart';
 
 /// Core daily-use screen: an operator selects a farmer, shift, FAT, and
 /// quantity — the amount is computed live from the active rate chart and
@@ -140,7 +141,7 @@ class _MilkCollectionScreenState extends State<MilkCollectionScreen> {
                   shrinkWrap: true,
                   itemCount: results.length,
                   itemBuilder: (ctx, i) => ListTile(
-                    title: Text(results[i].name, style: const TextStyle(fontSize: 20)),
+                    title: Text(results[i].displayName, style: const TextStyle(fontSize: 20)),
                     subtitle: Text(results[i].farmerCode),
                     onTap: () {
                       setState(() => _selectedFarmer = results[i]);
@@ -160,7 +161,20 @@ class _MilkCollectionScreenState extends State<MilkCollectionScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('दूध सङ्कलन')), // Milk Collection
+      appBar: AppBar(
+        title: const Text('दूध सङ्कलन'), // Milk Collection
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.people_alt_outlined),
+            tooltip: 'किसान व्यवस्थापन', // Farmer management
+            onPressed: () {
+              Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => FarmerListScreen(centerId: widget.centerId),
+              ));
+            },
+          ),
+        ],
+      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -170,7 +184,7 @@ class _MilkCollectionScreenState extends State<MilkCollectionScreen> {
               onPressed: _pickFarmer,
               icon: const Icon(Icons.person_search, size: 28),
               label: Text(
-                _selectedFarmer?.name ?? Strings.selectFarmer,
+                _selectedFarmer?.displayName ?? Strings.selectFarmer,
                 style: const TextStyle(fontSize: 20),
               ),
               style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(64)),

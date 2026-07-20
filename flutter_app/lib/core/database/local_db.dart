@@ -40,12 +40,14 @@ class LocalDb {
       );
     ''');
 
+    // name and mobile are both optional at registration — a center can add a
+    // farmer with just an ID number (farmer_code) and fill in the rest later.
     await db.execute('''
       CREATE TABLE farmers (
         id TEXT PRIMARY KEY,
         client_uuid TEXT UNIQUE NOT NULL,
         farmer_code TEXT NOT NULL,
-        name TEXT NOT NULL,
+        name TEXT,
         mobile TEXT,
         center_id TEXT NOT NULL,
         sync_status TEXT NOT NULL DEFAULT 'pending',

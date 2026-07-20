@@ -67,9 +67,9 @@ class Center {
 class Farmer {
   final String id;
   final String clientUuid;
-  final String farmerCode;
-  final String name;
-  final String? mobile;
+  final String farmerCode; // ID number — serial number the center assigns
+  final String? name; // optional at registration, editable later
+  final String? mobile; // optional at registration, editable later
   final String centerId;
   final SyncStatus syncStatus;
 
@@ -77,11 +77,24 @@ class Farmer {
     required this.id,
     required this.clientUuid,
     required this.farmerCode,
-    required this.name,
+    this.name,
     this.mobile,
     required this.centerId,
     this.syncStatus = SyncStatus.pending,
   });
+
+  /// Convenience for list/search display when name hasn't been filled in yet.
+  String get displayName => (name != null && name!.trim().isNotEmpty) ? name! : farmerCode;
+
+  Farmer copyWith({String? name, String? mobile}) => Farmer(
+        id: id,
+        clientUuid: clientUuid,
+        farmerCode: farmerCode,
+        name: name ?? this.name,
+        mobile: mobile ?? this.mobile,
+        centerId: centerId,
+        syncStatus: SyncStatus.pending,
+      );
 
   Map<String, Object?> toLocalMap() => {
         'id': id,
@@ -97,7 +110,7 @@ class Farmer {
         id: m['id'] as String,
         clientUuid: m['client_uuid'] as String,
         farmerCode: m['farmer_code'] as String,
-        name: m['name'] as String,
+        name: m['name'] as String?,
         mobile: m['mobile'] as String?,
         centerId: m['center_id'] as String,
         syncStatus:

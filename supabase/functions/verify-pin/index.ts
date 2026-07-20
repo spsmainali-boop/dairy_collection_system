@@ -8,11 +8,28 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
+// Browsers send a CORS preflight (OPTIONS) request before the real POST.
+// Without these headers, the preflight itself fails and the browser blocks
+// the actual request entirely — reported as a generic "CORS error", even
+// though the real cause is this missing response handling.
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+};
+
 Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
+
   try {
     const { mobile, pin } = await req.json();
     if (!mobile || !pin) {
-      return new Response(JSON.stringify({ error: 'mobile and pin required' }), { status: 400 });
+      return new Response(JSON.stringify({ error: 'mobile and pin required' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     const supabase = createClient(supabaseUrl, serviceRoleKey);
@@ -21,7 +38,10 @@ Deno.serve(async (req) => {
     const { data, error } = await supabase.rpc('verify_user_pin', { p_mobile: mobile, p_pin: pin });
 
     if (error || !data || data.length === 0) {
-      return new Response(JSON.stringify({ error: 'invalid credentials' }), { status: 401 });
+      return new Response(JSON.stringify({ error: 'invalid credentials' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     const user = data[0];
@@ -32,14 +52,17 @@ Deno.serve(async (req) => {
         center_id: user.center_id,
         must_change_pin: user.must_change_pin,
       }),
-      { status: 200, headers: { 'Content-Type': 'application/json' } },
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     );
   } catch (e) {
-    return new Response(JSON.stringify({ error: String(e) }), { status: 500 });
+    return new Response(JSON.stringify({ error: String(e) }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
   }
 });
 
-/* Companion Postgres function (add to schema.sql):
+/* Companion Postgres function (already applied to your database):
 
 create or replace function verify_user_pin(p_mobile text, p_pin text)
 returns table(id uuid, role user_role, center_id uuid, must_change_pin boolean)
