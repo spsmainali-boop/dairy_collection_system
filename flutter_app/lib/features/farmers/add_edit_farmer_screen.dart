@@ -35,7 +35,7 @@ class _AddEditFarmerScreenState extends State<AddEditFarmerScreen> {
   bool _saving = false;
   String? _error;
 
-  List<Center> _centers = [];
+  List<CollectionCenter> _centers = [];
   late String _selectedCenterId;
 
   bool get _isEditing => widget.farmer != null;
@@ -54,7 +54,7 @@ class _AddEditFarmerScreenState extends State<AddEditFarmerScreen> {
   Future<void> _loadCenters() async {
     final db = await LocalDb.instance.db;
     final rows = await db.query('centers', orderBy: 'name ASC');
-    setState(() => _centers = rows.map((r) => Center.fromLocalMap(r)).toList());
+    setState(() => _centers = rows.map((r) => CollectionCenter.fromLocalMap(r)).toList());
   }
 
   String get _tempPinPreview {

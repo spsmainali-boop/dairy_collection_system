@@ -11,7 +11,11 @@ enum UserRole { superAdmin, l2Admin, l1Operator, l0Operator, farmer }
 
 enum CollectionShift { morning, evening }
 
-class Center {
+/// NOTE: named CollectionCenter (not "Center") — Flutter itself has a
+/// built-in widget called `Center` (for centering content on screen), and
+/// naming this class `Center` causes an unresolvable import collision
+/// anywhere both `models.dart` and Flutter's widgets are imported together.
+class CollectionCenter {
   final String id;
   final String clientUuid;
   final String name;
@@ -23,7 +27,7 @@ class Center {
   final String settlementCycle; // '15day' | 'monthly'
   final SyncStatus syncStatus;
 
-  Center({
+  CollectionCenter({
     required this.id,
     required this.clientUuid,
     required this.name,
@@ -49,7 +53,7 @@ class Center {
         'sync_status': syncStatus.name,
       };
 
-  factory Center.fromLocalMap(Map<String, Object?> m) => Center(
+  factory CollectionCenter.fromLocalMap(Map<String, Object?> m) => CollectionCenter(
         id: m['id'] as String,
         clientUuid: m['client_uuid'] as String,
         name: m['name'] as String,
