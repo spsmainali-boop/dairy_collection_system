@@ -4,8 +4,9 @@ import '../../core/models/models.dart';
 import '../../core/theme/app_theme.dart';
 import 'add_edit_farmer_screen.dart';
 
-/// Lists farmers registered at this center. Tap a row to edit (fill in or
-/// change name/mobile); tap the + button to register a new farmer.
+/// Lists farmers registered at this center. Tap a row to open their profile
+/// (change name/mobile/Roll ID/center); tap "किसान थप्नुहोस्" to register a
+/// new farmer.
 class FarmerListScreen extends StatefulWidget {
   const FarmerListScreen({super.key, required this.centerId});
   final String centerId;
@@ -57,7 +58,7 @@ class _FarmerListScreenState extends State<FarmerListScreen> {
             child: TextField(
               controller: _searchCtrl,
               decoration: const InputDecoration(
-                hintText: 'खोज्नुहोस् (नाम, ID, मोबाइल)', // Search (name, ID, mobile)
+                hintText: 'खोज्नुहोस् (नाम, Roll ID, मोबाइल)', // Search (name, Roll ID, mobile)
                 prefixIcon: Icon(Icons.search),
               ),
               onChanged: (q) => _load(query: q),
@@ -80,7 +81,7 @@ class _FarmerListScreenState extends State<FarmerListScreen> {
                         ),
                         title: Text(f.displayName, style: const TextStyle(fontSize: 19)),
                         subtitle: Text(
-                          'ID: ${f.farmerCode}${f.mobile != null ? ' • ${f.mobile}' : ''}',
+                          'Roll ID: ${f.farmerCode}${f.mobile != null ? ' • ${f.mobile}' : ''}',
                           style: const TextStyle(fontSize: 15),
                         ),
                         trailing: const Icon(Icons.chevron_right),
@@ -94,7 +95,7 @@ class _FarmerListScreenState extends State<FarmerListScreen> {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _openAddEdit(),
         icon: const Icon(Icons.person_add_alt_1),
-        label: const Text('नयाँ किसान'), // New Farmer
+        label: const Text('किसान थप्नुहोस्'), // Add Farmer
       ),
     );
   }

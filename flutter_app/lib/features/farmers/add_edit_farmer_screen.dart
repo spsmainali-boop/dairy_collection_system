@@ -4,15 +4,21 @@ import '../../core/database/local_db.dart';
 import '../../core/models/models.dart';
 import '../../core/theme/app_theme.dart';
 
-/// Register a new farmer, or edit an existing one. Only the ID number
-/// (the serial number this center assigns) is required — name and mobile
-/// are optional and can be filled in or changed anytime later.
+/// Register a new farmer, or edit an existing one ("farmer profile").
 ///
-/// Updating a farmer's mobile number automatically provisions (or updates)
-/// their own login once this record syncs to Supabase — a database trigger
-/// there creates a login with PIN = the last 4 digits of that mobile,
-/// exactly like every other account in this system. No extra step needed
-/// here; saving the farmer record is enough.
+/// Only the Roll ID (the serial number this center assigns) is required —
+/// mobile and name are optional and can be filled in or changed anytime.
+/// Roll ID itself can also be changed later by the center (e.g. correcting
+/// a typo, or re-numbering), unlike the earlier version of this screen.
+///
+/// Setting/changing the mobile number automatically provisions (or updates)
+/// the farmer's own login once this record syncs to Supabase — a database
+/// trigger there creates a login with PIN = the last 4 digits of that
+/// mobile. The "temporary PIN" shown here is a live preview of that PIN so
+/// the center can tell the farmer their login on the spot.
+///
+/// On an existing farmer's profile, the center can also reassign which
+/// collection center the farmer belongs to.
 class AddEditFarmerScreen extends StatefulWidget {
   const AddEditFarmerScreen({super.key, required this.centerId, this.farmer});
   final String centerId;
@@ -23,26 +29,44 @@ class AddEditFarmerScreen extends StatefulWidget {
 }
 
 class _AddEditFarmerScreenState extends State<AddEditFarmerScreen> {
+  late final TextEditingController _mobileCtrl;
   late final TextEditingController _idCtrl;
   late final TextEditingController _nameCtrl;
-  late final TextEditingController _mobileCtrl;
   bool _saving = false;
   String? _error;
+
+  List<Center> _centers = [];
+  late String _selectedCenterId;
 
   bool get _isEditing => widget.farmer != null;
 
   @override
   void initState() {
     super.initState();
+    _mobileCtrl = TextEditingController(text: widget.farmer?.mobile ?? '');
     _idCtrl = TextEditingController(text: widget.farmer?.farmerCode ?? '');
     _nameCtrl = TextEditingController(text: widget.farmer?.name ?? '');
-    _mobileCtrl = TextEditingController(text: widget.farmer?.mobile ?? '');
+    _selectedCenterId = widget.farmer?.centerId ?? widget.centerId;
+    _mobileCtrl.addListener(() => setState(() {})); // live-update temp PIN preview
+    _loadCenters();
+  }
+
+  Future<void> _loadCenters() async {
+    final db = await LocalDb.instance.db;
+    final rows = await db.query('centers', orderBy: 'name ASC');
+    setState(() => _centers = rows.map((r) => Center.fromLocalMap(r)).toList());
+  }
+
+  String get _tempPinPreview {
+    final digits = _mobileCtrl.text.trim();
+    if (digits.length < 4) return '----';
+    return digits.substring(digits.length - 4);
   }
 
   Future<void> _save() async {
     final id = _idCtrl.text.trim();
     if (id.isEmpty) {
-      setState(() => _error = 'ID नम्बर आवश्यक छ'); // ID number is required
+      setState(() => _error = 'Roll ID आवश्यक छ'); // Roll ID is required
       return;
     }
 
@@ -62,7 +86,7 @@ class _AddEditFarmerScreenState extends State<AddEditFarmerScreen> {
       farmerCode: id,
       name: name.isEmpty ? null : name,
       mobile: mobile.isEmpty ? null : mobile,
-      centerId: widget.centerId,
+      centerId: _selectedCenterId,
     );
 
     try {
@@ -82,21 +106,38 @@ class _AddEditFarmerScreenState extends State<AddEditFarmerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final mobileChanged = _isEditing && _mobileCtrl.text.trim() != (widget.farmer?.mobile ?? '');
+    final showTempPin = _mobileCtrl.text.trim().isNotEmpty;
 
     return Scaffold(
-      appBar: AppBar(title: Text(_isEditing ? 'किसान सम्पादन' : 'नयाँ किसान')), // Edit Farmer / New Farmer
+      appBar: AppBar(title: Text(_isEditing ? 'किसान प्रोफाइल' : 'किसान थप्नुहोस्')), // Farmer Profile / Add Farmer
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             TextField(
-              controller: _idCtrl,
-              enabled: !_isEditing, // ID number shouldn't change once assigned
+              controller: _mobileCtrl,
+              keyboardType: TextInputType.phone,
               style: const TextStyle(fontSize: 22),
               decoration: const InputDecoration(
-                labelText: 'ID नम्बर *', // ID Number (required)
+                labelText: 'मोबाइल नम्बर (वैकल्पिक)', // Mobile number (optional)
+                prefixIcon: Icon(Icons.phone_android),
+              ),
+            ),
+            if (showTempPin)
+              Padding(
+                padding: const EdgeInsets.only(top: 8, left: 4),
+                child: Text(
+                  'अस्थायी पिन: $_tempPinPreview', // Temporary PIN: ____
+                  style: const TextStyle(fontSize: 15, color: AppTheme.primaryGreen, fontWeight: FontWeight.w600),
+                ),
+              ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _idCtrl,
+              style: const TextStyle(fontSize: 22),
+              decoration: const InputDecoration(
+                labelText: 'Roll ID *', // compulsory, always editable — center can renumber
                 prefixIcon: Icon(Icons.badge_outlined),
               ),
             ),
@@ -109,26 +150,22 @@ class _AddEditFarmerScreenState extends State<AddEditFarmerScreen> {
                 prefixIcon: Icon(Icons.person_outline),
               ),
             ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _mobileCtrl,
-              keyboardType: TextInputType.phone,
-              style: const TextStyle(fontSize: 22),
-              decoration: const InputDecoration(
-                labelText: 'मोबाइल नम्बर (वैकल्पिक)', // Mobile number (optional)
-                prefixIcon: Icon(Icons.phone_android),
-              ),
-              onChanged: (_) => setState(() {}), // refresh the mobile-changed hint below
-            ),
-            if (mobileChanged || (!_isEditing && _mobileCtrl.text.trim().isNotEmpty))
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  'नयाँ मोबाइल नम्बरको अन्तिम ४ अंक किसानको लगइन पिन हुनेछ।',
-                  // "The last 4 digits of the new mobile number will be the farmer's login PIN."
-                  style: TextStyle(fontSize: 14, color: Colors.grey.shade700),
+            if (_isEditing) ...[
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                value: _centers.any((c) => c.id == _selectedCenterId) ? _selectedCenterId : null,
+                decoration: const InputDecoration(
+                  labelText: 'सङ्कलन केन्द्र', // Collection Center
+                  prefixIcon: Icon(Icons.store_outlined),
                 ),
+                items: _centers
+                    .map((c) => DropdownMenuItem(value: c.id, child: Text(c.name, style: const TextStyle(fontSize: 18))))
+                    .toList(),
+                onChanged: (v) {
+                  if (v != null) setState(() => _selectedCenterId = v);
+                },
               ),
+            ],
             if (_error != null)
               Padding(
                 padding: const EdgeInsets.only(top: 16),
