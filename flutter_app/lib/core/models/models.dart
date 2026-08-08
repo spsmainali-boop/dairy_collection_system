@@ -188,8 +188,17 @@ class MilkCollectionEntry {
       );
 
   /// Auto-calculation used everywhere (entry screen, edits, imports).
-  static double calculateAmount(
-      {required double quantityLiters, required double ratePerLiter}) {
-    return double.parse((quantityLiters * ratePerLiter).toStringAsFixed(2));
+  ///
+  /// Pricing formula: Amount = FAT% x Quantity (liters) x Rate
+  /// (Rate is a single flat "per FAT-point per liter" value the center
+  /// sets — NOT a FAT-range slab rate.) e.g. FAT 5.5, 5.5 L, Rate Rs 15
+  /// -> 5.5 x 5.5 x 15 = Rs 453.75.
+  static double calculateAmount({
+    required double fat,
+    required double quantityLiters,
+    required double ratePerLiterPerFatPoint,
+  }) {
+    return double.parse(
+        (fat * quantityLiters * ratePerLiterPerFatPoint).toStringAsFixed(2));
   }
 }

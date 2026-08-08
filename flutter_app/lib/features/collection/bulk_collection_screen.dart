@@ -135,7 +135,8 @@ class _BulkCollectionScreenState extends State<BulkCollectionScreen> {
         fat: fat,
         quantityLiters: qty,
         rateApplied: rate,
-        amount: MilkCollectionEntry.calculateAmount(quantityLiters: qty, ratePerLiter: rate),
+        amount: MilkCollectionEntry.calculateAmount(
+            fat: fat, quantityLiters: qty, ratePerLiterPerFatPoint: rate),
         enteredBy: widget.enteredByUserId,
       );
       await LocalDb.instance.upsertAndQueue(

@@ -3,9 +3,17 @@ import 'package:uuid/uuid.dart';
 import '../../core/database/local_db.dart';
 import '../../core/theme/app_theme.dart';
 
-/// Lets a center set/edit this month's FAT-slab rate chart — e.g.
-/// FAT 3.0–3.5 → Rs 62/L, FAT 3.5–4.0 → Rs 66/L. This is what the bulk
-/// entry screen looks up when computing each farmer's amount.
+/// Lets a center set this month's milk rate — a single flat value, not a
+/// FAT-range slab table. Pricing formula used throughout the app:
+///
+///   Amount = FAT% x Quantity (liters) x this rate
+///
+/// e.g. FAT 5.5, 5.5 L, rate Rs 15 -> 5.5 x 5.5 x 15 = Rs 453.75
+///
+/// Internally this still uses the `rate_charts` table (fat_min=0,
+/// fat_max=100 — a single row covering every possible FAT% — so the same
+/// lookup query in the bulk entry screen keeps working unchanged); it just
+/// isn't exposed to the user as ranges anymore.
 class RateChartScreen extends StatefulWidget {
   const RateChartScreen({super.key, required this.centerId});
   final String centerId;
@@ -15,7 +23,7 @@ class RateChartScreen extends StatefulWidget {
 }
 
 class _RateChartScreenState extends State<RateChartScreen> {
-  List<Map<String, Object?>> _slabs = [];
+  Map<String, Object?>? _currentRate;
   bool _loading = true;
 
   String get _monthKey =>
@@ -34,42 +42,38 @@ class _RateChartScreenState extends State<RateChartScreen> {
       'rate_charts',
       where: 'center_id = ? AND month = ?',
       whereArgs: [widget.centerId, _monthKey],
-      orderBy: 'fat_min ASC',
+      limit: 1,
     );
     setState(() {
-      _slabs = rows;
+      _currentRate = rows.isNotEmpty ? rows.first : null;
       _loading = false;
     });
   }
 
-  Future<void> _addOrEditSlab({Map<String, Object?>? existing}) async {
-    final fatMinCtrl = TextEditingController(text: existing != null ? existing['fat_min'].toString() : '');
-    final fatMaxCtrl = TextEditingController(text: existing != null ? existing['fat_max'].toString() : '');
-    final rateCtrl = TextEditingController(text: existing != null ? existing['rate_per_liter'].toString() : '');
+  Future<void> _editRate() async {
+    final rateCtrl = TextEditingController(
+        text: _currentRate != null ? _currentRate!['rate_per_liter'].toString() : '');
     String? error;
 
     await showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(builder: (ctx, setDialogState) {
         return AlertDialog(
-          title: Text(existing != null ? 'दर सम्पादन गर्नुहोस्' : 'नयाँ दर थप्नुहोस्'), // Edit rate / Add new rate
+          title: Text(_currentRate != null ? 'दर परिवर्तन गर्नुहोस्' : 'यो महिनाको दर सेट गर्नुहोस्'),
+          // "Change rate" / "Set this month's rate"
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextField(
-                controller: fatMinCtrl,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(labelText: 'फ्याट देखि (जस्तै: 3.0)'), // FAT from
-              ),
-              TextField(
-                controller: fatMaxCtrl,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(labelText: 'फ्याट सम्म (जस्तै: 3.5)'), // FAT to
-              ),
+              const Text('रकम = फ्याट% × क्वान्टिटी (लिटर) × दर', style: TextStyle(fontSize: 13, color: Colors.black54)),
+              // "Amount = FAT% x Quantity (liters) x Rate"
+              const SizedBox(height: 12),
               TextField(
                 controller: rateCtrl,
+                autofocus: true,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(labelText: 'दर प्रति लिटर (रु.)'), // Rate per liter
+                style: const TextStyle(fontSize: 22),
+                decoration: const InputDecoration(labelText: 'दर (रु. प्रति फ्याट% प्रति लिटर)'),
+                // "Rate (Rs. per FAT% per liter)"
               ),
               if (error != null)
                 Padding(
@@ -82,15 +86,13 @@ class _RateChartScreenState extends State<RateChartScreen> {
             TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('रद्द गर्नुहोस्')), // Cancel
             ElevatedButton(
               onPressed: () async {
-                final fatMin = double.tryParse(fatMinCtrl.text.trim());
-                final fatMax = double.tryParse(fatMaxCtrl.text.trim());
                 final rate = double.tryParse(rateCtrl.text.trim());
-                if (fatMin == null || fatMax == null || rate == null || fatMax <= fatMin) {
-                  setDialogState(() => error = 'सही मान भर्नुहोस् (सम्म > देखि)'); // enter valid values
+                if (rate == null || rate <= 0) {
+                  setDialogState(() => error = 'सही दर भर्नुहोस्'); // enter a valid rate
                   return;
                 }
-                final id = existing?['id'] as String? ?? const Uuid().v4();
-                final clientUuid = existing?['client_uuid'] as String? ?? id;
+                final id = _currentRate?['id'] as String? ?? const Uuid().v4();
+                final clientUuid = _currentRate?['client_uuid'] as String? ?? id;
                 await LocalDb.instance.upsertAndQueue(
                   table: 'rate_charts',
                   row: {
@@ -98,13 +100,13 @@ class _RateChartScreenState extends State<RateChartScreen> {
                     'client_uuid': clientUuid,
                     'center_id': widget.centerId,
                     'month': _monthKey,
-                    'fat_min': fatMin,
-                    'fat_max': fatMax,
+                    'fat_min': 0,
+                    'fat_max': 100, // covers every FAT% — flat per-point rate, not slabs
                     'rate_per_liter': rate,
                     'sync_status': 'pending',
                   },
                   clientUuid: clientUuid,
-                  operation: existing != null ? 'update' : 'insert',
+                  operation: _currentRate != null ? 'update' : 'insert',
                 );
                 if (ctx.mounted) Navigator.pop(ctx);
               },
@@ -123,48 +125,45 @@ class _RateChartScreenState extends State<RateChartScreen> {
       appBar: AppBar(title: const Text('दूध दर')), // Milk Rate
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : _slabs.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text('यो महिनाको लागि दर तोकिएको छैन', style: TextStyle(fontSize: 18)),
-                      // "No rate set for this month"
-                      const SizedBox(height: 16),
-                      ElevatedButton.icon(
-                        onPressed: () => _addOrEditSlab(),
-                        icon: const Icon(Icons.add),
-                        label: const Text('नयाँ दर थप्नुहोस्'), // Add new rate
-                      ),
-                    ],
+          : Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text(
+                    'रकम = फ्याट% × क्वान्टिटी (लिटर) × दर',
+                    style: TextStyle(fontSize: 15, color: Colors.black54),
+                    textAlign: TextAlign.center,
                   ),
-                )
-              : ListView.separated(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: _slabs.length,
-                  separatorBuilder: (_, __) => const Divider(),
-                  itemBuilder: (context, i) {
-                    final s = _slabs[i];
-                    final fatMin = (s['fat_min'] as num).toDouble();
-                    final fatMax = (s['fat_max'] as num).toDouble();
-                    final rate = (s['rate_per_liter'] as num).toDouble();
-                    return ListTile(
-                      title: Text('फ्याट $fatMin – $fatMax', style: const TextStyle(fontSize: 18)),
-                      subtitle: Text(
-                        'रु. ${rate.toStringAsFixed(2)} / लिटर',
-                        style: const TextStyle(fontSize: 16, color: AppTheme.primaryGreen, fontWeight: FontWeight.w600),
-                      ),
-                      trailing: const Icon(Icons.edit_outlined),
-                      onTap: () => _addOrEditSlab(existing: s),
-                    );
-                  },
-                ),
-      floatingActionButton: _slabs.isEmpty
-          ? null
-          : FloatingActionButton.extended(
-              onPressed: () => _addOrEditSlab(),
-              icon: const Icon(Icons.add),
-              label: const Text('नयाँ दर'), // New rate
+                  const SizedBox(height: 24),
+                  Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryGreen.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Column(
+                      children: [
+                        Text(
+                          _currentRate != null
+                              ? 'रु. ${(_currentRate!['rate_per_liter'] as num).toStringAsFixed(2)}'
+                              : 'तोकिएको छैन', // Not set
+                          style: const TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: AppTheme.primaryGreen),
+                        ),
+                        const SizedBox(height: 4),
+                        const Text('प्रति फ्याट% प्रति लिटर', style: TextStyle(fontSize: 15)), // per FAT% per liter
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 28),
+                  ElevatedButton.icon(
+                    onPressed: _editRate,
+                    icon: Icon(_currentRate != null ? Icons.edit : Icons.add),
+                    label: Text(_currentRate != null ? 'दर परिवर्तन गर्नुहोस्' : 'दर सेट गर्नुहोस्'),
+                    // "Change rate" / "Set rate"
+                  ),
+                ],
+              ),
             ),
     );
   }
