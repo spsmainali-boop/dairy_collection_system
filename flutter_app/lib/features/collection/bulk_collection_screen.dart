@@ -6,6 +6,7 @@ import '../../core/models/models.dart';
 import '../../core/theme/app_theme.dart';
 import '../farmers/add_edit_farmer_screen.dart';
 import '../farmers/farmer_list_screen.dart';
+import '../rates/rate_chart_screen.dart';
 
 /// Primary post-login screen for a collection center.
 ///
@@ -173,6 +174,15 @@ class _BulkCollectionScreenState extends State<BulkCollectionScreen> {
       appBar: AppBar(
         title: const Text('थोक सङ्कलन'), // Bulk Collection
         actions: [
+          IconButton(
+            icon: const Icon(Icons.currency_rupee),
+            tooltip: 'दूध दर', // Milk Rate
+            onPressed: () {
+              Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => RateChartScreen(centerId: widget.centerId),
+              ));
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.person_add_alt_1),
             tooltip: 'किसान थप्नुहोस्', // Add Farmer
