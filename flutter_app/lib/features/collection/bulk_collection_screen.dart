@@ -43,10 +43,38 @@ class _BulkCollectionScreenState extends State<BulkCollectionScreen> {
   bool _saving = false;
   String? _summary;
 
+  double _todayLiters = 0;
+  double _todayAmount = 0;
+
   @override
   void initState() {
     super.initState();
     _loadFarmers();
+    _loadTodayTotals();
+  }
+
+  /// Today's total liters/amount across all farmers at this center, for the
+  /// small summary strip at the top of the screen.
+  Future<void> _loadTodayTotals() async {
+    final db = await LocalDb.instance.db;
+    final todayStart = DateTime(_date.year, _date.month, _date.day).toIso8601String();
+    final todayEnd = DateTime(_date.year, _date.month, _date.day, 23, 59, 59).toIso8601String();
+    final rows = await db.query(
+      'milk_collections',
+      where: 'center_id = ? AND is_deleted = 0 AND collection_date >= ? AND collection_date <= ?',
+      whereArgs: [widget.centerId, todayStart, todayEnd],
+    );
+    double liters = 0, amount = 0;
+    for (final r in rows) {
+      liters += (r['quantity_liters'] as num).toDouble();
+      amount += (r['amount'] as num).toDouble();
+    }
+    if (mounted) {
+      setState(() {
+        _todayLiters = liters;
+        _todayAmount = amount;
+      });
+    }
   }
 
   @override
@@ -158,6 +186,7 @@ class _BulkCollectionScreenState extends State<BulkCollectionScreen> {
         for (final c in _qtyCtrls.values) c.clear();
       }
     });
+    _loadTodayTotals();
   }
 
   Future<void> _goToAddFarmer() async {
@@ -226,6 +255,37 @@ class _BulkCollectionScreenState extends State<BulkCollectionScreen> {
                       ),
                       const SizedBox(width: 12),
                       Text('मिति: $dateLabel', style: const TextStyle(fontSize: 14, color: Colors.black54)),
+                    ],
+                  ),
+                ),
+                Container(
+                  margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryGreen.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      Column(
+                        children: [
+                          Text('${_todayLiters.toStringAsFixed(1)} लि.',
+                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                          const Text('आजको जम्मा लिटर', style: TextStyle(fontSize: 12, color: Colors.black54)),
+                          // "Today's total liters"
+                        ],
+                      ),
+                      Container(width: 1, height: 32, color: Colors.black12),
+                      Column(
+                        children: [
+                          Text('रु. ${_todayAmount.toStringAsFixed(0)}',
+                              style: const TextStyle(
+                                  fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.primaryGreen)),
+                          const Text('आजको जम्मा रकम', style: TextStyle(fontSize: 12, color: Colors.black54)),
+                          // "Today's total amount"
+                        ],
+                      ),
                     ],
                   ),
                 ),

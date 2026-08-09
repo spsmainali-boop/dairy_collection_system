@@ -75,6 +75,7 @@ class Farmer {
   final String? name; // optional at registration, editable later
   final String? mobile; // optional at registration, editable later
   final String centerId;
+  final String status; // 'pending' | 'active' | 'disconnected' — see connect/disconnect flow
   final SyncStatus syncStatus;
 
   Farmer({
@@ -84,6 +85,7 @@ class Farmer {
     this.name,
     this.mobile,
     required this.centerId,
+    this.status = 'active',
     this.syncStatus = SyncStatus.pending,
   });
 
@@ -97,6 +99,7 @@ class Farmer {
         name: name ?? this.name,
         mobile: mobile ?? this.mobile,
         centerId: centerId,
+        status: status,
         syncStatus: SyncStatus.pending,
       );
 
@@ -107,6 +110,7 @@ class Farmer {
         'name': name,
         'mobile': mobile,
         'center_id': centerId,
+        'status': status,
         'sync_status': syncStatus.name,
       };
 
@@ -117,6 +121,7 @@ class Farmer {
         name: m['name'] as String?,
         mobile: m['mobile'] as String?,
         centerId: m['center_id'] as String,
+        status: m['status'] as String? ?? 'active',
         syncStatus:
             SyncStatus.values.firstWhere((e) => e.name == m['sync_status']),
       );

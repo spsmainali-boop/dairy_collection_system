@@ -7,6 +7,8 @@ import 'core/sync/sync_service.dart';
 import 'core/theme/app_theme.dart';
 import 'features/auth/login_screen.dart';
 import 'features/collection/bulk_collection_screen.dart';
+import 'features/farmers/farmer_dashboard_screen.dart';
+import 'features/farmers/farmer_pending_screen.dart';
 
 // TODO: move these to --dart-define / a .env loaded via flutter_dotenv
 // before shipping. Never commit real keys to source control.
@@ -70,7 +72,10 @@ class DairyApp extends StatefulWidget {
 class _DairyAppState extends State<DairyApp> {
   late final AuthService _authService;
   late final SyncService _syncService;
-  bool _loggedIn = false;
+
+  LoginResult? _session;
+  String? _mobile;
+  String? _pin; // kept only in memory, needed to re-verify farmer actions (accept/reject/disconnect)
 
   @override
   void initState() {
@@ -86,23 +91,110 @@ class _DairyAppState extends State<DairyApp> {
     super.dispose();
   }
 
+  void _logout() {
+    setState(() {
+      _session = null;
+      _mobile = null;
+      _pin = null;
+    });
+  }
+
+  Widget _homeForSession() {
+    final session = _session!;
+
+    if (session.role != 'farmer') {
+      // Operator/admin roles land on the daily bulk-entry screen.
+      return BulkCollectionScreen(
+        centerId: session.centerId ?? 'CURRENT_CENTER_ID',
+        enteredByUserId: session.userId,
+      );
+    }
+
+    // Farmer roles: route based on connection status.
+    switch (session.farmerStatus) {
+      case 'pending':
+        return FarmerPendingScreen(
+          authService: _authService,
+          mobile: _mobile!,
+          pin: _pin!,
+          centerName: session.farmerCenterName ?? '',
+          onAccepted: () => setState(() => _session = LoginResult(
+                userId: session.userId,
+                mustChangePin: session.mustChangePin,
+                role: session.role,
+                farmerId: session.farmerId,
+                farmerStatus: 'active',
+                farmerCenterName: session.farmerCenterName,
+              )),
+          onRejected: _logout,
+        );
+      case 'active':
+        return FarmerDashboardScreen(
+          authService: _authService,
+          mobile: _mobile!,
+          pin: _pin!,
+          farmerId: session.farmerId!,
+          centerName: session.farmerCenterName ?? '',
+          onDisconnected: _logout,
+          onLogout: _logout,
+        );
+      case 'disconnected':
+        return Scaffold(
+          appBar: AppBar(title: const Text(Strings.appName), actions: [
+            IconButton(icon: const Icon(Icons.logout), onPressed: _logout),
+          ]),
+          body: const Center(
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: Text(
+                'तपाईं हाल कुनै सक्रिय केन्द्रसँग जोडिनुभएको छैन।',
+                // "You're not currently connected to any active center."
+                style: TextStyle(fontSize: 18),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+        );
+      default:
+        // Offline login for a farmer account — connection status unknown
+        // without a server round-trip, so don't guess.
+        return Scaffold(
+          appBar: AppBar(title: const Text(Strings.appName), actions: [
+            IconButton(icon: const Icon(Icons.logout), onPressed: _logout),
+          ]),
+          body: const Center(
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: Text(
+                'तपाईंको जडान स्थिति हेर्न इन्टरनेट चाहिन्छ। पछि फेरि लगइन गर्नुहोस्।',
+                // "Viewing your connection status needs internet. Please log in again later."
+                style: TextStyle(fontSize: 18),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+        );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: Strings.appName,
       debugShowCheckedModeBanner: false,
       theme: AppTheme.theme,
-      home: _loggedIn
-          ? const BulkCollectionScreen(
-              // In a full build these come from the logged-in user's session
-              // (local_session table) rather than being hardcoded.
-              centerId: 'CURRENT_CENTER_ID',
-              enteredByUserId: 'CURRENT_USER_ID',
-            )
-          : LoginScreen(
+      home: _session == null
+          ? LoginScreen(
               authService: _authService,
-              onLoggedIn: () => setState(() => _loggedIn = true),
-            ),
+              onLoggedIn: (result, mobile, pin) {
+                setState(() {
+                  _session = result;
+                  _mobile = mobile;
+                  _pin = pin;
+                });
+              },
+            )
+          : _homeForSession(),
     );
   }
 }

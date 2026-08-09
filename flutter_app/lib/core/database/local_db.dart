@@ -42,6 +42,9 @@ class LocalDb {
 
     // name and mobile are both optional at registration — a center can add a
     // farmer with just an ID number (farmer_code) and fill in the rest later.
+    // status: 'pending' (mobile just set/changed, awaiting farmer accept),
+    // 'active' (accepted, or no mobile so no acceptance needed), or
+    // 'disconnected' (farmer left — history stays, mobile becomes free).
     await db.execute('''
       CREATE TABLE farmers (
         id TEXT PRIMARY KEY,
@@ -50,6 +53,7 @@ class LocalDb {
         name TEXT,
         mobile TEXT,
         center_id TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'active',
         sync_status TEXT NOT NULL DEFAULT 'pending',
         updated_at TEXT NOT NULL DEFAULT (datetime('now'))
       );

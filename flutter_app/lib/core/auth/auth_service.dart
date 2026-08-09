@@ -4,6 +4,29 @@ import 'package:sqflite/sqflite.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../database/local_db.dart';
 
+/// Everything the app needs to know right after a successful login, used to
+/// decide which screen to route to (operator bulk-entry, farmer dashboard,
+/// or farmer pending-acceptance screen).
+class LoginResult {
+  final String userId;
+  final bool mustChangePin;
+  final String role; // 'super_admin' | 'l2_admin' | 'l1_operator' | 'l0_operator' | 'farmer'
+  final String? centerId; // for operator roles
+  final String? farmerId; // for role == 'farmer'
+  final String? farmerStatus; // 'pending' | 'active' | 'disconnected' | null (offline/unknown)
+  final String? farmerCenterName;
+
+  LoginResult({
+    required this.userId,
+    required this.mustChangePin,
+    required this.role,
+    this.centerId,
+    this.farmerId,
+    this.farmerStatus,
+    this.farmerCenterName,
+  });
+}
+
 /// Handles mobile-number + PIN authentication.
 ///
 /// Online: calls a Supabase Edge Function `verify-pin` which checks the PIN
@@ -13,20 +36,20 @@ import '../database/local_db.dart';
 /// login again fully offline without ever contacting the server.
 ///
 /// Offline: if there's no connectivity, validate against `local_session`.
-/// The user must have logged in online at least once on this device.
+/// The user must have logged in online at least once on this device. Note:
+/// farmer connection status (pending/active/disconnected) can only be
+/// confirmed online — offline logins for farmer accounts return a null
+/// farmerStatus, and the app should show a "needs internet" message rather
+/// than guessing.
 class AuthService {
   AuthService(this._supabase);
   final SupabaseClient _supabase;
 
   String _localHash(String pin, String mobile) {
-    // Salting with the mobile number is sufficient here since this hash only
-    // ever needs to protect against casual on-device tampering; the
-    // authoritative check is always the server-side bcrypt hash when online.
     return sha256.convert(utf8.encode('$mobile:$pin')).toString();
   }
 
-  /// Returns must_change_pin flag on success; throws on invalid credentials.
-  Future<bool> login({required String mobile, required String pin}) async {
+  Future<LoginResult> login({required String mobile, required String pin}) async {
     try {
       final res = await _supabase.functions.invoke('verify-pin', body: {
         'mobile': mobile,
@@ -40,12 +63,21 @@ class AuthService {
       await db.insert('local_session', {
         'mobile': mobile,
         'pin_hash': _localHash(pin, mobile),
-        'user_id': data['user_id'],
+        'user_id': data['id'],
         'role': data['role'],
         'center_id': data['center_id'],
         'must_change_pin': (data['must_change_pin'] == true) ? 1 : 0,
       }, conflictAlgorithm: ConflictAlgorithm.replace);
-      return data['must_change_pin'] == true;
+
+      return LoginResult(
+        userId: data['id'] as String,
+        mustChangePin: data['must_change_pin'] == true,
+        role: data['role'] as String,
+        centerId: data['center_id'] as String?,
+        farmerId: data['farmer_id'] as String?,
+        farmerStatus: data['farmer_status'] as String?,
+        farmerCenterName: data['farmer_center_name'] as String?,
+      );
     } on AuthException {
       rethrow;
     } catch (_) {
@@ -54,24 +86,33 @@ class AuthService {
     }
   }
 
-  Future<bool> _offlineLogin({required String mobile, required String pin}) async {
+  Future<LoginResult> _offlineLogin({required String mobile, required String pin}) async {
     final db = await LocalDb.instance.db;
     final rows = await db.query('local_session', where: 'mobile = ?', whereArgs: [mobile]);
     if (rows.isEmpty) {
       throw AuthException(
           'यो डिभाइसमा पहिले लगइन गरिएको छैन — इन्टरनेट जडान गरेर पहिलो पटक लगइन गर्नुहोस्.');
-      // "This device hasn't logged in before — connect to the internet for first login."
     }
     final cached = rows.first;
     if (cached['pin_hash'] != _localHash(pin, mobile)) {
       throw AuthException('पिन मिलेन');
     }
-    return (cached['must_change_pin'] as int) == 1;
+    return LoginResult(
+      userId: cached['user_id'] as String,
+      mustChangePin: (cached['must_change_pin'] as int) == 1,
+      role: cached['role'] as String,
+      centerId: cached['center_id'] as String?,
+      // farmer connection status unknown offline — app should prompt for
+      // internet rather than assume pending/active.
+      farmerId: null,
+      farmerStatus: null,
+      farmerCenterName: null,
+    );
   }
 
   /// Default PIN convention: last 4 digits of the mobile number. Enforced
-  /// server-side at user creation (see `set_default_pin` in schema.sql); this
-  /// helper exists so the client can show the expected default in onboarding UI.
+  /// server-side at user creation; this helper exists so the client can show
+  /// the expected default in onboarding UI.
   static String defaultPinFor(String mobile) =>
       mobile.length >= 4 ? mobile.substring(mobile.length - 4) : mobile;
 
@@ -87,6 +128,28 @@ class AuthService {
       where: 'mobile = ?',
       whereArgs: [mobile],
     );
+  }
+
+  /// Farmer accepts or rejects a pending connection to their current center.
+  Future<bool> respondToConnection({required String mobile, required String pin, required bool accept}) async {
+    final res = await _supabase.functions.invoke('respond-connection', body: {
+      'mobile': mobile,
+      'pin': pin,
+      'accept': accept,
+    });
+    return res.status == 200;
+  }
+
+  /// Farmer disconnects from their current center. Returns a message —
+  /// either a success confirmation or the reason it was blocked (e.g. an
+  /// outstanding balance).
+  Future<String> disconnectFarmer({required String mobile, required String pin}) async {
+    final res = await _supabase.functions.invoke('disconnect-farmer', body: {
+      'mobile': mobile,
+      'pin': pin,
+    });
+    final data = res.data as Map<String, dynamic>;
+    return data['message'] as String? ?? (res.status == 200 ? 'सफल भयो' : 'त्रुटि भयो');
   }
 }
 

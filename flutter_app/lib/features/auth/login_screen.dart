@@ -5,7 +5,7 @@ import '../../core/theme/app_theme.dart';
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key, required this.authService, required this.onLoggedIn});
   final AuthService authService;
-  final VoidCallback onLoggedIn;
+  final void Function(LoginResult result, String mobile, String pin) onLoggedIn;
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -23,15 +23,15 @@ class _LoginScreenState extends State<LoginScreen> {
       _error = null;
     });
     try {
-      final mustChangePin = await widget.authService.login(
-        mobile: _mobileCtrl.text.trim(),
-        pin: _pinCtrl.text.trim(),
-      );
+      final mobile = _mobileCtrl.text.trim();
+      var pin = _pinCtrl.text.trim();
+      final result = await widget.authService.login(mobile: mobile, pin: pin);
       if (!mounted) return;
-      if (mustChangePin) {
-        await _showChangePinDialog(_mobileCtrl.text.trim());
+      if (result.mustChangePin) {
+        final newPin = await _showChangePinDialog(mobile);
+        if (newPin != null) pin = newPin; // keep using the freshly-set PIN, not the stale default
       }
-      widget.onLoggedIn();
+      widget.onLoggedIn(result, mobile, pin);
     } catch (e) {
       setState(() => _error = e.toString());
     } finally {
@@ -39,10 +39,11 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  Future<void> _showChangePinDialog(String mobile) async {
+  Future<String?> _showChangePinDialog(String mobile) async {
     final newPinCtrl = TextEditingController();
     final confirmCtrl = TextEditingController();
     String? dialogError;
+    String? savedNewPin;
 
     await showDialog(
       context: context,
@@ -91,6 +92,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   return;
                 }
                 await widget.authService.changePin(mobile: mobile, newPin: newPinCtrl.text);
+                savedNewPin = newPinCtrl.text;
                 if (ctx.mounted) Navigator.of(ctx).pop();
               },
               child: const Text(Strings.save),
@@ -99,6 +101,7 @@ class _LoginScreenState extends State<LoginScreen> {
         );
       }),
     );
+    return savedNewPin;
   }
 
   @override

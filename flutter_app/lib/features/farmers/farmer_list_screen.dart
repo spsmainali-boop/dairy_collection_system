@@ -84,7 +84,13 @@ class _FarmerListScreenState extends State<FarmerListScreen> {
                           'Roll ID: ${f.farmerCode}${f.mobile != null ? ' • ${f.mobile}' : ''}',
                           style: const TextStyle(fontSize: 15),
                         ),
-                        trailing: const Icon(Icons.chevron_right),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _StatusBadge(status: f.status),
+                            const Icon(Icons.chevron_right),
+                          ],
+                        ),
                         onTap: () => _openAddEdit(farmer: f),
                       );
                     },
@@ -97,6 +103,39 @@ class _FarmerListScreenState extends State<FarmerListScreen> {
         icon: const Icon(Icons.person_add_alt_1),
         label: const Text('किसान थप्नुहोस्'), // Add Farmer
       ),
+    );
+  }
+}
+
+/// Small colored pill showing a farmer's connection status — only really
+/// meaningful once they have a mobile number (no mobile = no login = no
+/// acceptance needed, always shown as 'active' by convention).
+class _StatusBadge extends StatelessWidget {
+  const _StatusBadge({required this.status});
+  final String status;
+
+  @override
+  Widget build(BuildContext context) {
+    late Color color;
+    late String label;
+    switch (status) {
+      case 'pending':
+        color = AppTheme.warnAmber;
+        label = 'पेन्डिङ'; // Pending
+        break;
+      case 'disconnected':
+        color = AppTheme.errorRed;
+        label = 'विच्छेद'; // Disconnected
+        break;
+      default:
+        color = AppTheme.primaryGreen;
+        label = 'सक्रिय'; // Active
+    }
+    return Container(
+      margin: const EdgeInsets.only(right: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(color: color.withOpacity(0.15), borderRadius: BorderRadius.circular(8)),
+      child: Text(label, style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w600)),
     );
   }
 }
