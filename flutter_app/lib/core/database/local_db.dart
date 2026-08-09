@@ -14,13 +14,38 @@ class LocalDb {
   static final LocalDb instance = LocalDb._();
   Database? _db;
 
+  // Bump this whenever _createSchema changes in a way that affects an
+  // ALREADY-CREATED local database (new column, new table, etc.), and add
+  // the matching migration step to _onUpgrade below. Forgetting this step
+  // means anyone who already has the app open/installed keeps their OLD
+  // schema forever — their local `_createSchema` never re-runs, since
+  // sqflite only calls onCreate for a brand-new database file.
+  static const int _dbVersion = 2;
+
   Future<Database> get db async {
     _db ??= await _open();
     return _db!;
   }
 
   Future<Database> _open() async {
-    return openAppDatabase(_createSchema);
+    return openAppDatabase(
+      version: _dbVersion,
+      onCreate: _createSchema,
+      onUpgrade: _onUpgrade,
+    );
+  }
+
+  /// Runs once per device, only for installs that already had a database at
+  /// an older version — brings them up to the current schema without losing
+  /// existing data.
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      // v2: added farmer connect/disconnect status tracking.
+      await db.execute("ALTER TABLE farmers ADD COLUMN status TEXT NOT NULL DEFAULT 'active';");
+    }
+    // Future migrations: `if (oldVersion < 3) { ... }`, etc. — each guarded
+    // independently so upgrading from any older version applies every step
+    // in between, in order.
   }
 
   Future<void> _createSchema(Database db, int version) async {
