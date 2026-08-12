@@ -31,16 +31,18 @@ class LoginResult {
 ///
 /// Online: calls a Supabase Edge Function `verify-pin` which checks the PIN
 /// against the bcrypt hash server-side (never sent in plaintext to the DB
-/// directly) and returns a signed session. On success we cache a local-only
-/// SHA-256 hash of the PIN (NOT the bcrypt hash) so the device can validate
-/// login again fully offline without ever contacting the server.
+/// directly). On success, the function ALSO bootstraps a real Supabase Auth
+/// session (see verify-pin's own comments) and returns a refresh_token,
+/// which this client immediately applies via `auth.setSession()` — this is
+/// what makes `auth.uid()` resolve correctly for every RLS policy on every
+/// subsequent direct client call (sync, farmer reads, etc.). We also cache
+/// a local-only SHA-256 hash of the PIN (NOT the bcrypt hash) so the device
+/// can validate login again fully offline without ever contacting the
+/// server — offline logins skip the real-session bootstrap entirely, since
+/// that inherently requires connectivity.
 ///
 /// Offline: if there's no connectivity, validate against `local_session`.
-/// The user must have logged in online at least once on this device. Note:
-/// farmer connection status (pending/active/disconnected) can only be
-/// confirmed online — offline logins for farmer accounts return a null
-/// farmerStatus, and the app should show a "needs internet" message rather
-/// than guessing.
+/// The user must have logged in online at least once on this device.
 class AuthService {
   AuthService(this._supabase);
   final SupabaseClient _supabase;
@@ -50,40 +52,61 @@ class AuthService {
   }
 
   Future<LoginResult> login({required String mobile, required String pin}) async {
+    Map<String, dynamic> data;
     try {
       final res = await _supabase.functions.invoke('verify-pin', body: {
         'mobile': mobile,
         'pin': pin,
       });
-      if (res.status != 200) {
+      data = res.data as Map<String, dynamic>;
+    } on FunctionException catch (e) {
+      // The server actually responded (just not with success) — this is a
+      // real answer, not a connectivity problem, so surface the real reason
+      // rather than silently falling back to offline mode.
+      if (e.status == 401) {
         throw AuthException('मोबाइल नम्बर वा पिन मिलेन'); // mobile/PIN mismatch
       }
-      final data = res.data as Map<String, dynamic>;
-      final db = await LocalDb.instance.db;
-      await db.insert('local_session', {
-        'mobile': mobile,
-        'pin_hash': _localHash(pin, mobile),
-        'user_id': data['id'],
-        'role': data['role'],
-        'center_id': data['center_id'],
-        'must_change_pin': (data['must_change_pin'] == true) ? 1 : 0,
-      }, conflictAlgorithm: ConflictAlgorithm.replace);
-
-      return LoginResult(
-        userId: data['id'] as String,
-        mustChangePin: data['must_change_pin'] == true,
-        role: data['role'] as String,
-        centerId: data['center_id'] as String?,
-        farmerId: data['farmer_id'] as String?,
-        farmerStatus: data['farmer_status'] as String?,
-        farmerCenterName: data['farmer_center_name'] as String?,
-      );
-    } on AuthException {
-      rethrow;
+      final details = e.details;
+      final serverMsg = (details is Map && details['error'] is String) ? details['error'] as String : null;
+      throw AuthException(serverMsg ?? 'लगइन गर्न सकिएन (त्रुटि ${e.status})');
     } catch (_) {
-      // Network unavailable — fall back to cached local session.
+      // Genuine network/connectivity failure — fall back to cached local session.
       return _offlineLogin(mobile: mobile, pin: pin);
     }
+
+    // Establish a real Supabase Auth session from the refresh token the
+    // function just minted, so auth.uid() resolves for RLS from here on.
+    final refreshToken = data['refresh_token'] as String?;
+    if (refreshToken != null) {
+      try {
+        await _supabase.auth.setSession(refreshToken);
+      } catch (_) {
+        // Non-fatal: login itself already succeeded (PIN was correct).
+        // Sync/RLS-dependent calls may still fail until next successful
+        // login, but we don't want to block the person from using the app
+        // over this.
+      }
+    }
+
+    final db = await LocalDb.instance.db;
+    await db.insert('local_session', {
+      'mobile': mobile,
+      'pin_hash': _localHash(pin, mobile),
+      'user_id': data['id'],
+      'role': data['role'],
+      'center_id': data['center_id'],
+      'must_change_pin': (data['must_change_pin'] == true) ? 1 : 0,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+
+    return LoginResult(
+      userId: data['id'] as String,
+      mustChangePin: data['must_change_pin'] == true,
+      role: data['role'] as String,
+      centerId: data['center_id'] as String?,
+      farmerId: data['farmer_id'] as String?,
+      farmerStatus: data['farmer_status'] as String?,
+      farmerCenterName: data['farmer_center_name'] as String?,
+    );
   }
 
   Future<LoginResult> _offlineLogin({required String mobile, required String pin}) async {
@@ -132,24 +155,34 @@ class AuthService {
 
   /// Farmer accepts or rejects a pending connection to their current center.
   Future<bool> respondToConnection({required String mobile, required String pin, required bool accept}) async {
-    final res = await _supabase.functions.invoke('respond-connection', body: {
-      'mobile': mobile,
-      'pin': pin,
-      'accept': accept,
-    });
-    return res.status == 200;
+    try {
+      final res = await _supabase.functions.invoke('respond-connection', body: {
+        'mobile': mobile,
+        'pin': pin,
+        'accept': accept,
+      });
+      return res.status == 200;
+    } on FunctionException {
+      return false;
+    }
   }
 
   /// Farmer disconnects from their current center. Returns a message —
   /// either a success confirmation or the reason it was blocked (e.g. an
   /// outstanding balance).
   Future<String> disconnectFarmer({required String mobile, required String pin}) async {
-    final res = await _supabase.functions.invoke('disconnect-farmer', body: {
-      'mobile': mobile,
-      'pin': pin,
-    });
-    final data = res.data as Map<String, dynamic>;
-    return data['message'] as String? ?? (res.status == 200 ? 'सफल भयो' : 'त्रुटि भयो');
+    try {
+      final res = await _supabase.functions.invoke('disconnect-farmer', body: {
+        'mobile': mobile,
+        'pin': pin,
+      });
+      final data = res.data as Map<String, dynamic>;
+      return data['message'] as String? ?? 'सफल भयो';
+    } on FunctionException catch (e) {
+      final details = e.details;
+      final serverMsg = (details is Map && details['error'] is String) ? details['error'] as String : null;
+      return serverMsg ?? 'त्रुटि भयो';
+    }
   }
 }
 
